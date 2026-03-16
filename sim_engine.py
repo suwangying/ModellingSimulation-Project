@@ -13,8 +13,8 @@ import numpy as np
 
 import config
 from models import Passenger, Elevator
-from traffic import generate_up_peak_passengers
-from policies import nearest_pickup_policy
+from traffic import (generate_up_peak_passengers, generate_midday_passengers, generate_down_peak_passengers)
+from policies import (nearest_pickup_policy, zoning_policy, up_peak_bias_policy)
 
 
 @dataclass
@@ -32,17 +32,25 @@ Event = Tuple[float, int, str, Any]
 def run_simulation(
     seed: int,
     elevators_count: int = config.DEFAULT_ELEVATORS,
-    policy: str = "nearest"
-) -> Dict[str, float]:
+    policy: str = "nearest",
+    scenario: str = "up_peak"
+ ) -> Dict[str, float]:
     """
     Runs a single simulation trial and returns a dictionary of metrics.
     """
 
     rng = np.random.default_rng(seed)
 
-    # Generate Poisson up-peak arrivals (matches progress report)
-    passengers = generate_up_peak_passengers(
-        config.SIM_TIME, config.LAMBDA, rng)
+    # Select passenger generator based on scenario
+    if scenario == "up_peak":
+        passengers = generate_up_peak_passengers(config.SIM_TIME, config.LAMBDA, rng)
+    elif scenario == "midday":
+        passengers = generate_midday_passengers(config.SIM_TIME, config.LAMBDA, rng)
+    elif scenario == "down_peak":
+        passengers = generate_down_peak_passengers(config.SIM_TIME, config.LAMBDA, rng)
+    else:
+        raise ValueError(f"Unknown scenario: {scenario}")
+    
 
     # Initialize queues and elevators
     floor_queues = [deque() for _ in range(config.FLOORS)]
@@ -79,8 +87,13 @@ def run_simulation(
 
         if policy == "nearest":
             return nearest_pickup_policy(elev.current_floor, qlens, state.assigned_pickups)
-
-        raise ValueError(f"Unknown policy: {policy}")
+        elif policy == "zoning":
+            # Assumes zoning_policy signature: (elevator_floor, queue_lengths, assigned_pickups, elevator_id, total_elevators)
+            return zoning_policy(elev.current_floor, qlens, state.assigned_pickups, eid, len(state.elevators))
+        elif policy == "up_peak_bias":
+            return up_peak_bias_policy(elev.current_floor, qlens, state.assigned_pickups)
+        else:
+            raise ValueError(f"Unknown policy: {policy}")
 
     def schedule_wake(current_time: float) -> None:
         """
@@ -201,7 +214,7 @@ def run_simulation(
 if __name__ == "__main__":
     # Quick single-run check (MVP)
     metrics = run_simulation(
-        seed=config.BASE_SEED, elevators_count=config.DEFAULT_ELEVATORS, policy="nearest")
-    print("Single Run (Up-Peak, Poisson) Results:")
+        seed=config.BASE_SEED, elevators_count=config.DEFAULT_ELEVATORS, policy="zoning", scenario="midday")
+    print("Single Run (Midday, Zoning):")
     for k, v in metrics.items():
         print(f"{k:>10}: {v:.3f}")

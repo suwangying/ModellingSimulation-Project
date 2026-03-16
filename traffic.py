@@ -40,3 +40,46 @@ def generate_up_peak_passengers(
                           destination=destination, group_size=1))
 
     return passengers
+
+
+def generate_midday_passengers(sim_time, lam, rng) -> List[Passenger]:
+    """
+    Midday Scenario: Passengers travel between random floors
+    """
+    passengers = []
+    t = 0.0
+    floors = list(range(config.FLOORS))
+
+    while (t < sim_time):
+        t += rng.exponential(1.0 / lam)
+        if (t >= sim_time):
+            break
+
+        origin = int(rng.choice(floors))
+        destination = int(rng.choice(floors))
+
+        passengers.append(Passenger(arrival_time=t, origin=origin, destination=destination))
+
+    return passengers
+
+
+def generate_down_peak_passengers(sim_time, lam, rng) -> List[Passenger]:
+    """
+    Evening down-peak: Most passengers travel from upper floors to lobby
+    """
+    passengers = []
+    t = 0.0
+    upper_floors = list(range(config.LOBBY_FLOOR + 1, config.FLOORS))
+
+    while (t < sim_time):
+        t += rng.exponential(1.0 / lam)
+        if (t >= sim_time):
+            break
+
+        origin = int(rng.choice(upper_floors))
+        destination = config.LOBBY_FLOOR
+
+        passengers.append(Passenger(arrival_time=t, origin=origin, destination=destination))
+
+    return passengers
+

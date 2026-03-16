@@ -45,3 +45,50 @@ From this folder:
 - Add additional dispatch strategies in `policies.py` (zoning, up-peak bias)
 - Add more scenarios in `traffic.py` (midday inter-floor, evening down-peak)
 - Use Kaggle data later to calibrate λ(t), destination distributions, and group sizes
+
+
+# ------------------------------------------------------------------------------------------------------------------------------------------------
+
+# Elevator Simulation — Person B: Policies & Scenarios
+
+This folder contains the **policies and scenario extensions** for the elevator simulation project.  
+It allows comparing multiple dispatch strategies under different traffic patterns to analyze performance metrics such as wait time, queue length, and elevator utilization.
+
+---
+
+## What This Does
+
+Person B’s contributions extend the MVP simulation by enabling **meaningful comparisons**:
+
+- **Traffic Scenarios**
+  - `up_peak`: Morning rush (baseline)
+  - `midday`: Inter-floor traffic
+  - `down_peak`: Evening lobby-to-exit traffic
+
+- **Dispatch Policies**
+  - `nearest`: Baseline nearest-request / nearest-available
+  - `zoning`: Elevators assigned to specific floor ranges
+  - `up_peak_bias`: Keeps one elevator near lobby and prioritizes lobby pickups
+
+- **Experiment Questions**
+  - Define which metrics to compare across policies and scenarios
+  - Examples: mean wait, 95th percentile wait, utilization vs wait trade-offs
+
+---
+
+## File Overview
+
+1. `traffic.py` | Generates passenger arrivals for all scenarios (`up_peak`, `midday`, `down_peak`)
+2. `policies.py` | Implements dispatch strategies (`nearest`, `zoning`, `up_peak_bias`) 
+3. `experiment_questions.md` | Lists questions to guide experiments and report analysis 
+4. `sim_engine.py` | Core simulation engine (Person A) now supports scenario & policy selection 
+5. `monte_carlo.py` | Runs multiple simulation trials to summarize scenario-policy performance 
+6. `sanity_tests.py` | Checks logical trends for policies and scenarios (e.g., more elevators → lower wait) 
+
+---
+
+## How to extend (next steps)
+- Use Kaggle data later to calibrate λ(t), destination distributions, and group sizes
+- Test combinations of multiple policies + multiple scenarios
+- Compare number of elevators vs policy performance under each scenario
+- Collect results to answer experiment_questions.md and generate report tables/plots
