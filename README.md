@@ -92,3 +92,50 @@ Person B’s contributions extend the MVP simulation by enabling **meaningful co
 - Test combinations of multiple policies + multiple scenarios
 - Compare number of elevators vs policy performance under each scenario
 - Collect results to answer experiment_questions.md and generate report tables/plots
+
+#-------------------------------------------------------------------------------------------------------------------------------------
+
+# Elevator Simulation Project - Person C (Monte Carlo Experiments, Kaggle Validation, Plots)
+
+## What This Does
+This folder contains the **results pipeline and analysis tools** for the elevator simulation project.
+It allows running repeated simulation trials, extracting comparable summaries from a Kaggle dataset, and generating plots for the report/demo
+
+**Monte Carlo Experiments**
+- *'monte_carlo.py'* runs repeated simulation trials using different random seeds
+- saves per-trial outputs into *results.csv* (can be changed by changing amount of trials in line 103)
+- supports comparing cases across elevator counts, policies and scenarios
+
+**Kaggle Dataset Extraction**
+- *kaggle_extract.py* reads the kaggle elevator dataset and generates processed summary files
+- Extracts hourly call counts (from 6am-8pm OR 6:00-20:00), requested floor distribution, people count distribution, and wait time summmaries
+- Creates outputs that can later be compared against simulation assumptions/results
+
+**Plots for Demo / Report**
+- *make_plots.py* reads *results.csv* and the extracted kaggle files to generate figures
+- Creates plots for wait time, queue length, utilization, hourly demand, p95 wait by case and requested floor distribution
+- All plots are saved to *plots/* folder
+
+## File Overview
+1. 'monte_carlo.py' | Runs repeated simulation trials and writes per-trial results to 'results.csv'
+2. 'results.csv' | Stores Monte Carlo output rows for each trial/case combination
+     - Trial, Case, Elevator, Lambda, Scenario, Policy, mean_wait, median_wait, p95_wait, max_queue, avg_queue, avg_util
+3. 'kaggle_extract.py' | Processes the kaggle elevator dataset into summary files
+4. 'KaggleDatasets/' | Contains the initial Kaggle Dataset along with 'processed/' where all the summarized files are
+    - Kaggle_floor_dsitribution.csv, kaggle_hourly_calls.csv, kaggle_people_count_distribution.csv, kaggle_wait_time_summary.csv
+5. 'make_plots.py' | Generates plot files from simulation results and Kaggle summmaries
+6. 'plots/' | Stores generated '.png' figures for analysis (overridden each run)
+    - mean_wait_by_case, avg_queue_by_case, avg_util_by_case, kaggle_floor_dsitribution, kaggle_hourly_calls, p95_wait_by_case
+
+## How to Run
+Run the files in this order:
+1. `python monte_carlo.py`
+2. `python kaggle_extract.py`
+3. `python make_plots.py`
+
+## How to Extend (next steps)
+- Increase Monte Carlo trials from `20` to `100+` for stronger statistical stability
+- Add more experiment cases in `monte_carlo.py` for additional elevator counts, policies, and scenarios
+- Use Kaggle hourly demand to calibrate `lambda(t)` more directly
+- Add richer simulation outputs such as raw wait-time lists, per-elevator utilization, and queue traces
+- Generate additional figures such as wait-time histograms, utilization per elevator, and queue length over time
