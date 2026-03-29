@@ -1,0 +1,4 @@
+scope,mean_wait,median_wait,p95_wait,min_wait,max_wait,sample_size
+all,12.23,12.49,19.36,0.16,28.13,300
+peak_yes,12.12,12.23,19.38,0.16,24.38,115
+peak_no,12.29,12.59,19.34,0.96,28.13,185
