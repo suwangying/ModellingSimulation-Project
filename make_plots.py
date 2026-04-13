@@ -6,22 +6,18 @@
 # plot files for the report/demo.
 #
 # Plots created:
-# 1. mean_wait_by_case.png
-# 2. p95_wait_by_case.png
-# 3. avg_util_by_case.png
-# 4. avg_queue_by_case.png
+# 1. mean_wait_grouped.png
+# 2. p95_wait_grouped.png
+# 3. avg_util_grouped.png
+# 4. avg_queue_grouped.png
 # 5. kaggle_hourly_calls.png
 # 6. kaggle_floor_distribution.png
-#
-# Important note:
-# This script only creates plots that are supported by the current outputs.
-# Some future plots such as passenger wait histograms, per-elevator utilization,
-# and queue-over-time traces would require extra data to be returned by sim_engine.py.
 
 import os
 import csv
 from collections import defaultdict
 
+import numpy as np
 import matplotlib.pyplot as plt
 
 
@@ -35,182 +31,215 @@ PLOTS_DIR = "plots"
 
 
 def ensure_plots_dir(path):
-    """
-    Create the plots folder if it does not already exist.
-
-    Why this matters:
-    - matplotlib can save files only if the parent folder exists
-    - using exist_ok=True makes the script safe to rerun many times
-    """
     os.makedirs(path, exist_ok=True)
 
 
 def read_csv(path):
-    """
-    Read a CSV file into a list of dictionaries.
-
-    This keeps the script flexible and simple:
-    - results.csv and processed Kaggle files can both be loaded with the same function
-    - we convert types later inside the specific processing functions
-    """
     with open(path, "r", newline="", encoding="utf-8") as f:
         reader = csv.DictReader(f)
         return list(reader)
 
 
-def aggregate_results_by_case(rows):
+def aggregate_results(rows):
     """
-    Group simulation rows by Case and compute average metrics for each case.
-
-    Why this step is needed:
-    - results.csv contains one row per Monte Carlo trial
-    - the bar charts should compare the average performance of each case
-    - so we aggregate all trial rows for the same case into one summary row
-
-    Returns:
-    - a list of dictionaries, one per case, containing averaged metrics
+    Aggregate Monte Carlo rows by (scenario, policy).
     """
     grouped = defaultdict(list)
 
     for row in rows:
-        grouped[row["Case"]].append(row)
+        key = (row["scenario"], row["policy"])
+        grouped[key].append(row)
 
     summary_rows = []
 
-    for case_name, case_rows in grouped.items():
-        mean_wait_values = [float(r["mean_wait"]) for r in case_rows]
-        p95_wait_values = [float(r["p95_wait"]) for r in case_rows]
-        avg_util_values = [float(r["avg_util"]) for r in case_rows]
-        avg_queue_values = [float(r["avg_queue"]) for r in case_rows]
-
+    for (scenario, policy), case_rows in grouped.items():
         summary_rows.append({
-            "Case": case_name,
-            "mean_wait": sum(mean_wait_values) / len(mean_wait_values),
-            "p95_wait": sum(p95_wait_values) / len(p95_wait_values),
-            "avg_util": sum(avg_util_values) / len(avg_util_values),
-            "avg_queue": sum(avg_queue_values) / len(avg_queue_values),
+            "scenario": scenario,
+            "policy": policy,
+            "mean_wait": np.mean([float(r["mean_wait"]) for r in case_rows]),
+            "p95_wait": np.mean([float(r["p95_wait"]) for r in case_rows]),
+            "avg_util": np.mean([float(r["avg_util"]) for r in case_rows]),
+            "avg_queue": np.mean([float(r["avg_queue"]) for r in case_rows]),
         })
 
-    # Sort the summaries by case name so plots are deterministic
-    summary_rows.sort(key=lambda x: x["Case"])
     return summary_rows
 
-
-def make_bar_chart(labels, values, title, ylabel, output_path, color):
+def make_elevator_scaling_plot(rows):
     """
-    Create and save a simple bar chart.
-
-    Parameters:
-    - labels: x-axis category labels
-    - values: numeric values for each bar
-    - title: chart title
-    - ylabel: y-axis label
-    - output_path: file path for saving the PNG
-    - color: bar color
-
-    Why this helper is useful:
-    - mean_wait, p95_wait, avg_util, and avg_queue charts all share the same layout
-    - using one helper keeps the script shorter and easier to maintain
+    Plot mean wait vs number of elevators (Q3)
     """
-    plt.figure(figsize=(10, 6))
-    plt.bar(labels, values, color=color)
-    plt.title(title)
-    plt.xlabel("Case")
-    plt.ylabel(ylabel)
-    plt.xticks(rotation=20, ha="right")
+
+    data = {}
+
+    for row in rows:
+        if row["scenario"] == "up_peak" and row["policy"] == "nearest":
+            e = int(row["Elevator"])
+            data.setdefault(e, []).append(float(row["mean_wait"]))
+
+    elevators = sorted(data.keys())
+    mean_waits = [sum(data[e]) / len(data[e]) for e in elevators]
+
+    plt.figure(figsize=(8, 5))
+    plt.plot(elevators, mean_waits, marker="o")
+    plt.title("Mean Wait vs Number of Elevators (Up-Peak, Nearest)")
+    plt.xlabel("Number of Elevators")
+    plt.ylabel("Mean Wait (seconds)")
+    plt.xticks(elevators)
+    plt.grid(True)
     plt.tight_layout()
-    plt.savefig(output_path)
+    plt.savefig(os.path.join(PLOTS_DIR, "elevator_scaling.png"))
     plt.close()
 
-
-def make_mean_wait_plot(summary_rows):
+def make_lambda_vs_queue_plot(rows):
     """
-    Create a bar chart of average mean_wait by case.
+    Plot average queue length vs lambda (Q8)
     """
-    labels = [row["Case"] for row in summary_rows]
-    values = [row["mean_wait"] for row in summary_rows]
+    data = {}
 
-    make_bar_chart(
-        labels=labels,
-        values=values,
-        title="Average Mean Wait by Case",
-        ylabel="Mean Wait (seconds)",
-        output_path=os.path.join(PLOTS_DIR, "mean_wait_by_case.png"),
-        color="steelblue"
-    )
+    for row in rows:
+        if row["scenario"] == "up_peak" and row["policy"] == "nearest":
+            lam = float(row["lambda"])
+            data.setdefault(lam, []).append(float(row["avg_queue"]))
 
+    lambdas = sorted(data.keys())
+    avg_queues = [sum(data[lam]) / len(data[lam]) for lam in lambdas]
 
-def make_p95_wait_plot(summary_rows):
+    plt.figure(figsize=(8, 5))
+    plt.plot(lambdas, avg_queues, marker="o", linewidth=2)
+    plt.title("Queue Length vs Arrival Rate (Up-Peak, Nearest)")
+    plt.xlabel("Arrival Rate (lambda)")
+    plt.ylabel("Average Queue Length")
+    plt.grid(True, linestyle="--", alpha=0.4)
+    plt.margins(x=0.05, y=0.12)
+
+    for x, y in zip(lambdas, avg_queues):
+        plt.text(x, y + max(avg_queues) * 0.02, f"{y:.1f}", ha="center", fontsize=9)
+
+    plt.tight_layout()
+    plt.savefig(os.path.join(PLOTS_DIR, "lambda_vs_queue.png"), dpi=200, bbox_inches="tight")
+    plt.close()
+
+def make_grouped_bar_chart(summary_rows, metric, title, ylabel, filename, ylim=None, label_offset_ratio=0.02):
     """
-    Create a bar chart of average p95_wait by case.
-
-    Why this plot matters:
-    - mean wait shows typical performance
-    - p95 wait shows worst-case passenger experience
+    Create grouped bar chart:
+    X-axis = scenario
+    Bars = policy
     """
-    labels = [row["Case"] for row in summary_rows]
-    values = [row["p95_wait"] for row in summary_rows]
 
-    make_bar_chart(
-        labels=labels,
-        values=values,
-        title="Average P95 Wait by Case",
-        ylabel="P95 Wait (seconds)",
-        output_path=os.path.join(PLOTS_DIR, "p95_wait_by_case.png"),
-        color="darkorange"
-    )
+    scenario_order = ["up_peak", "midday", "down_peak"]
+    policy_order = ["nearest", "zoning", "up_peak_bias"]
 
+    scenarios = [s for s in scenario_order if any(row["scenario"] == s for row in summary_rows)]
+    policies = [p for p in policy_order if any(row["policy"] == p for row in summary_rows)]
 
-def make_avg_util_plot(summary_rows):
+    data = {s: {p: 0 for p in policies} for s in scenarios}
+    for row in summary_rows:
+        data[row["scenario"]][row["policy"]] = row[metric]
+
+    pretty_scenarios = {
+        "up_peak": "Up-Peak",
+        "midday": "Midday",
+        "down_peak": "Down-Peak",
+    }
+
+    pretty_policies = {
+        "nearest": "Nearest",
+        "zoning": "Zoning",
+        "up_peak_bias": "Bias",
+    }
+
+    x = np.arange(len(scenarios))
+    width = 0.22
+
+    plt.figure(figsize=(10, 6))
+    offsets = np.linspace(-width, width, len(policies))
+
+    # collect all values first so we can compute nice limits
+    all_values = []
+    bar_groups = []
+
+    for i, policy in enumerate(policies):
+        values = [data[s][policy] for s in scenarios]
+        all_values.extend(values)
+        bars = plt.bar(x + offsets[i], values, width, label=pretty_policies[policy])
+        bar_groups.append(bars)
+
+    # axis scaling
+    if ylim is not None:
+        y_min, y_max = ylim
+    else:
+        y_min = 0
+        y_max = max(all_values) * 1.15 if all_values else 1
+
+    plt.ylim(y_min, y_max)
+
+    # label bars with sensible spacing
+    label_offset = (y_max - y_min) * label_offset_ratio
+    for bars in bar_groups:
+        for bar in bars:
+            height = bar.get_height()
+            plt.text(
+                bar.get_x() + bar.get_width() / 2,
+                height + label_offset,
+                f"{height:.2f}",
+                ha="center",
+                va="bottom",
+                fontsize=9
+            )
+
+    plt.xticks(x, [pretty_scenarios[s] for s in scenarios])
+    plt.xlabel("Scenario")
+    plt.ylabel(ylabel)
+    plt.title(title)
+    plt.legend()
+    plt.grid(axis="y", linestyle="--", alpha=0.4)
+    plt.tight_layout()
+    plt.savefig(os.path.join(PLOTS_DIR, filename), dpi=200, bbox_inches="tight")
+    plt.close()
+
+def make_utilization_scenario_plot(summary_rows):
     """
-    Create a bar chart of average utilization by case.
-
-    Why this plot matters:
-    - utilization helps show how busy the elevator system is
-    - it supports discussion of efficiency vs passenger wait tradeoffs
+    Simpler utilization plot:
+    average utilization by scenario, averaged across policies.
+    This avoids awkward duplicate-looking bars.
     """
-    labels = [row["Case"] for row in summary_rows]
-    values = [row["avg_util"] for row in summary_rows]
+    scenario_order = ["up_peak", "midday", "down_peak"]
+    pretty_scenarios = {
+        "up_peak": "Up-Peak",
+        "midday": "Midday",
+        "down_peak": "Down-Peak",
+    }
 
-    make_bar_chart(
-        labels=labels,
-        values=values,
-        title="Average Utilization by Case",
-        ylabel="Average Utilization",
-        output_path=os.path.join(PLOTS_DIR, "avg_util_by_case.png"),
-        color="seagreen"
-    )
+    scenario_to_vals = {s: [] for s in scenario_order}
+    for row in summary_rows:
+        scenario_to_vals[row["scenario"]].append(row["avg_util"])
 
+    scenarios = [s for s in scenario_order if scenario_to_vals[s]]
+    values = [np.mean(scenario_to_vals[s]) for s in scenarios]
 
-def make_avg_queue_plot(summary_rows):
-    """
-    Create a bar chart of average queue length by case.
+    plt.figure(figsize=(8, 5))
+    bars = plt.bar([pretty_scenarios[s] for s in scenarios], values)
 
-    Why this plot matters:
-    - queue length is a direct measure of congestion
-    - it helps explain why waits rise under heavier load or weaker policies
-    """
-    labels = [row["Case"] for row in summary_rows]
-    values = [row["avg_queue"] for row in summary_rows]
+    plt.ylim(0, 0.7)
+    for bar, val in zip(bars, values):
+        plt.text(
+            bar.get_x() + bar.get_width() / 2,
+            val + 0.015,
+            f"{val:.2f}",
+            ha="center",
+            va="bottom",
+            fontsize=9
+        )
 
-    make_bar_chart(
-        labels=labels,
-        values=values,
-        title="Average Queue Length by Case",
-        ylabel="Average Queue Length",
-        output_path=os.path.join(PLOTS_DIR, "avg_queue_by_case.png"),
-        color="mediumpurple"
-    )
-
+    plt.title("Average Utilization by Scenario")
+    plt.xlabel("Scenario")
+    plt.ylabel("Average Utilization")
+    plt.grid(axis="y", linestyle="--", alpha=0.4)
+    plt.tight_layout()
+    plt.savefig(os.path.join(PLOTS_DIR, "avg_util_by_scenario.png"), dpi=200, bbox_inches="tight")
+    plt.close()
 
 def make_kaggle_hourly_calls_plot(rows):
-    """
-    Create a line plot of Kaggle hourly call counts.
-
-    Why this plot matters:
-    - it visualizes demand intensity over time
-    - it can later be used to justify or estimate lambda values for simulation
-    """
     hours = [int(row["hour"]) for row in rows]
     call_counts = [int(row["call_count"]) for row in rows]
 
@@ -227,13 +256,6 @@ def make_kaggle_hourly_calls_plot(rows):
 
 
 def make_kaggle_floor_distribution_plot(rows):
-    """
-    Create a bar chart of requested floor distribution from the Kaggle dataset.
-
-    Why this plot matters:
-    - it shows how demand is distributed across floors
-    - it provides a direct comparison target for future simulation calibration
-    """
     floors = [int(row["floor_requested"]) for row in rows]
     probabilities = [float(row["probability"]) for row in rows]
 
@@ -248,30 +270,52 @@ def make_kaggle_floor_distribution_plot(rows):
 
 
 if __name__ == "__main__":
-    # Step 1: Make sure the plots output folder exists before saving anything.
     ensure_plots_dir(PLOTS_DIR)
 
-    # Step 2: Load the simulation results.
-    # This file must already exist, so run monte_carlo.py first.
     results_rows = read_csv(RESULTS_PATH)
+    summary_rows = aggregate_results(results_rows)
+    make_elevator_scaling_plot(results_rows)
+    
+    make_grouped_bar_chart(
+        summary_rows,
+        metric="mean_wait",
+        title="Mean Wait by Scenario and Policy",
+        ylabel="Mean Wait (seconds)",
+        filename="mean_wait_grouped.png",
+        ylim=(3, 8)
+    )
 
-    # Step 3: Convert per-trial Monte Carlo rows into one summary row per case.
-    # This makes the simulation comparison bar charts readable.
-    summary_rows = aggregate_results_by_case(results_rows)
+    make_grouped_bar_chart(
+        summary_rows,
+        metric="p95_wait",
+        title="P95 Wait by Scenario and Policy",
+        ylabel="P95 Wait (seconds)",
+        filename="p95_wait_grouped.png",
+        ylim=(8, 19)
+    )
 
-    # Step 4: Generate the simulation-result plots.
-    make_mean_wait_plot(summary_rows)
-    make_p95_wait_plot(summary_rows)
-    make_avg_util_plot(summary_rows)
-    make_avg_queue_plot(summary_rows)
+    make_grouped_bar_chart(
+        summary_rows,
+        metric="avg_util",
+        title="Utilization by Scenario and Policy",
+        ylabel="Average Utilization",
+        filename="avg_util_grouped.png",
+        ylim=(0, 0.5)
+    )
 
-    # Step 5: Load processed Kaggle summary data.
-    # These files must already exist, so run kaggle_extract.py first.
+    make_grouped_bar_chart(
+        summary_rows,
+        metric="avg_queue",
+        title="Average Queue Length by Scenario and Policy",
+        ylabel="Average Queue Length",
+        filename="avg_queue_grouped.png"
+    )
+
     kaggle_hourly_rows = read_csv(KAGGLE_HOURLY_PATH)
     kaggle_floor_rows = read_csv(KAGGLE_FLOOR_PATH)
 
-    # Step 6: Generate the Kaggle comparison plots.
     make_kaggle_hourly_calls_plot(kaggle_hourly_rows)
     make_kaggle_floor_distribution_plot(kaggle_floor_rows)
+    make_lambda_vs_queue_plot(results_rows)
 
     print("Generated 6 plot files in the plots folder.")

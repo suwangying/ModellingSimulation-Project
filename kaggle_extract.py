@@ -165,6 +165,20 @@ def extract_floor_distribution(rows):
 
     return output_rows
 
+def extract_overall_lambda(rows):
+    """
+    Compute one overall arrival-rate estimate for the whole dataset.
+    """
+    if not rows:
+        return 0.0
+
+    timestamps = sorted(row["timestamp"] for row in rows)
+    total_seconds = (timestamps[-1] - timestamps[0]).total_seconds()
+
+    if total_seconds <= 0:
+        return 0.0
+
+    return len(rows) / total_seconds
 
 def extract_people_count_distribution(rows):
     """
@@ -298,3 +312,5 @@ if __name__ == "__main__":
     )
 
     print("Wrote 4 processed Kaggle summary files to KaggleDatasets/processed")
+    overall_lambda = extract_overall_lambda(rows)
+    print(f"\nOverall lambda estimate from Kaggle data: {overall_lambda:.6f} arrivals/second")

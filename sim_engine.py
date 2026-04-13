@@ -54,7 +54,7 @@ def run_simulation(
 
     # Initialize queues and elevators
     floor_queues = [deque() for _ in range(config.FLOORS)]
-    elevators = [Elevator(eid=i, current_floor=config.LOBBY_FLOOR)
+    elevators = [Elevator(eid=i, current_floor=config.LOBBY_FLOOR, capacity=config.ELEVATOR_CAPACITY)
                  for i in range(elevators_count)]
     state = SimState(floor_queues=floor_queues,
                      elevators=elevators, assigned_pickups={})
@@ -107,15 +107,15 @@ def run_simulation(
 
     def serve_one_request(current_time: float, eid: int) -> None:
         """
-        If elevator is idle, pick a request and serve it:
-        - reserve pickup floor (for multi-elevator case)
-        - compute travel + stop time
-        - update elevator state
-        - record passenger wait
+        Batched version:
+        - pick one pickup floor
+        - board multiple passengers from that floor up to capacity
+        - drop them off in sorted destination order
+        - update wait times and elevator state
         """
         elev = state.elevators[eid]
 
-        # If we woke up early, ignore (it isn't free yet)
+        # If we woke up early, ignore
         if current_time < elev.available_time:
             return
 
@@ -126,36 +126,55 @@ def run_simulation(
         # Reserve pickup so another elevator doesn't also choose it
         state.assigned_pickups[pickup_floor] = eid
 
-        # Grab passenger from that floor
-        passenger: Passenger = state.floor_queues[pickup_floor].popleft()
+        # Start service when elevator is actually free
+        start_time = max(current_time, elev.available_time)
+
+        # Travel to pickup floor
+        travel_to_pickup = abs(elev.current_floor - pickup_floor) / config.ELEVATOR_SPEED
+        arrival_at_pickup = start_time + travel_to_pickup
+
+        # Board as many passengers as possible from this floor
+        boarded_passengers: List[Passenger] = []
+
+        while state.floor_queues[pickup_floor] and len(boarded_passengers) < elev.capacity:
+            passenger = state.floor_queues[pickup_floor].popleft()
+            passenger.board_time = arrival_at_pickup
+            wait_times.append(passenger.board_time - passenger.arrival_time)
+            boarded_passengers.append(passenger)
 
         # If floor queue is now empty, release reservation
         if len(state.floor_queues[pickup_floor]) == 0:
             state.assigned_pickups.pop(pickup_floor, None)
 
-        # --- Time model (simple + consistent) ---
-        travel_to_pickup = abs(elev.current_floor -
-                               passenger.origin) / config.ELEVATOR_SPEED
+        # If somehow nobody boarded, stop here
+        if not boarded_passengers:
+            state.assigned_pickups.pop(pickup_floor, None)
+            return
 
-        # Door + boarding time. (MVP: no detailed alighting model)
-        stop_time = config.DOOR_TIME + config.BOARD_TIME_PER_PERSON * passenger.group_size
+        # Pickup stop time:
+        # one door open/close cycle + boarding time for all boarded passengers
+        pickup_stop_time = config.DOOR_TIME + config.BOARD_TIME_PER_PERSON * len(boarded_passengers)
 
-        travel_to_dest = abs(passenger.destination -
-                             passenger.origin) / config.ELEVATOR_SPEED
+        # Compute trip through all unique destinations in sorted order
+        destinations = sorted(set(p.destination for p in boarded_passengers))
 
-        start_time = max(current_time, elev.available_time)
+        current_floor_after_pickup = pickup_floor
+        travel_after_pickup = 0.0
+        dropoff_stop_time = 0.0
 
-        # Define board_time as when elevator reaches the passenger's floor
-        passenger.board_time = start_time + travel_to_pickup
-        wait_times.append(passenger.board_time - passenger.arrival_time)
+        for dest in destinations:
+            travel_after_pickup += abs(dest - current_floor_after_pickup) / config.ELEVATOR_SPEED
+            dropoff_stop_time += config.DOOR_TIME
+            current_floor_after_pickup = dest
 
-        service_duration = travel_to_pickup + stop_time + travel_to_dest
+        service_duration = travel_to_pickup + pickup_stop_time + travel_after_pickup + dropoff_stop_time
 
+        # Update elevator state
         elev.available_time = start_time + service_duration
         elev.busy_time += service_duration
-        elev.current_floor = passenger.destination
+        elev.current_floor = current_floor_after_pickup
 
-        # If there are still passengers waiting, schedule this elevator again
+        # If there are still passengers waiting, schedule elevator again
         if total_queue_len() > 0:
             push_event(elev.available_time, "ELEV_WAKE", eid)
 

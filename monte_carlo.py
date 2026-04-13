@@ -100,12 +100,23 @@ def write_results_csv(results, output_path="results.csv"):
 
 
 if __name__ == "__main__":
-    TRIALS = 20  # Person A sanity-level; Person C can bump to 100–1000 later
+    TRIALS = 30  # Person A sanity-level; Person C can bump to 100–1000 later
 
     cases = [
-        ("Up-Peak Nearest", 1, 0.05, "up_peak", "nearest"),
-        ("Midday Zoning", 2, 0.05, "midday", "zoning"),
-        ("Evening Up-Peak Bias", 2, 0.05, "down_peak", "up_peak_bias"),
+        # UP-PEAK
+        ("UpPeak Nearest", 5, 0.05, "up_peak", "nearest"),
+        ("UpPeak Zoning", 5, 0.05, "up_peak", "zoning"),
+        ("UpPeak Bias", 5, 0.05, "up_peak", "up_peak_bias"),
+
+        # MIDDAY
+        ("Midday Nearest", 5, 0.05, "midday", "nearest"),
+        ("Midday Zoning", 5, 0.05, "midday", "zoning"),
+        ("Midday Bias", 5, 0.05, "midday", "up_peak_bias"),
+
+        # DOWN-PEAK
+        ("DownPeak Nearest", 5, 0.05, "down_peak", "nearest"),
+        ("DownPeak Zoning", 5, 0.05, "down_peak", "zoning"),
+        ("DownPeak Bias", 5, 0.05, "down_peak", "up_peak_bias"),
     ]
 
     all_results = []
